@@ -1,6 +1,6 @@
 #include "map_memory_node.hpp"
-#include <cmath>
-#include<vector>
+#include<iostream>
+#include<cmath>
 class MappingNode : public rclcpp::Node
 {
   public:
@@ -31,11 +31,12 @@ class MappingNode : public rclcpp::Node
 
     //Global map and position
     nav_msgs::msg::OccupancyGrid global_map_;
+
     double last_, last_y;
     const double distance_threshold = 5.0;
-    const double resolution = 0.1;
+    const int resolution = 10;
     bool costmap_updated_ = false;
-
+    global_map_.data=;
 
     //Costmap callback
     void costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
@@ -83,28 +84,51 @@ class MappingNode : public rclcpp::Node
       double y_offset = msg -> pose.pose.position.y;
       double orientation = msg -> pose.pose.orientation;
       //convert 1D array into 2D map
-      vector<int>cost_map = latest_costmap_.data;
-     
+      uint costmap[] = latest_costmap_.data;
+      const uint map_width = latest_costmap_.info.width;
+      const uint map_height = latest_costmap_.info.height;
+      int costmap_index = 0;
       // do magic with latest_costmap_ to convert to 2D
-      vector<vector<int>>2D_cost_map;
-
+      int 2D_cost_map[map_height][map_width];
+      for(int i = 0;i < map_height;i++)
+      {
+        for(int j = 0;j < map_width;j++)
+        {
+          2D_cost_map[i][j] = costmap[costmap_index];
+          costmap_index++;
+        }
+      }
 
       //convert costmap points into global map points      
-      for(int i = 0;i < 2D_cost_map.size();i++)
+      for(int i = 0;i < map_height;i++)
       {
-        for(int j = 0;j < 2D_cost_map[i].size();i++)
+        for(int j = 0;j < map_width;i++)
         {
           if(2D_cost_map[i] == 0) //nothing was recorded to be in that spot, so we dont try to replace any value
             continue;
           else
           {
-            double point_distance = std::sqrt(std::pow(2D_cost_map.size() - i, 2) + std::pow(j - 2D_cost_map[i].size()/2, 2)); //get distance from robot
-            int map_x = (int)(point_distance * cos(orientation) + x_offset);//get x pos on the map
-            int map_y = (int)(point_distance * sin(orientation) + y_offset);//get y pos on the map
-            global_map_[2D_cost_map[i].size() * i + j] = 2D_cost_map[i][j];//plot value onto global map
+            //get global map pos
+            double point_distance = std::sqrt(std::pow(map_height - i, 2) + std::pow(j - map_width/2, 2)); //get distance from robot
+            double relative_y = map_height - i;
+            double relative_x = j - map_width/2;
+            double point_angle = atan(relative_y / relative_x);
+            
+            int map_x = (int)(point_distance * cos(orientation + point_angle) + x_offset);//get x index on the map
+            int map_y = (int)(point_distance * sin(orientation + point_angle) + y_offset);//get y index on on the map
+            //plot onto global_map.data
+            try
+            {
+              global_map_.data[2D_cost_map[i].size() * map_y + map_x] = 2D_cost_map[i][j];//plot value onto global map
+            }
+            catch(...)
+            {
+              cout << "global map index out of bounds!"; //gonna make this print into the log later
+            }
           }
         }
-      }      
+      } 
+
     }
 
 
