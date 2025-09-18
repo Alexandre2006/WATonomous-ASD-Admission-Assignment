@@ -24,10 +24,10 @@ class MappingNode : public rclcpp::Node
     rclcpp:Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+
     //Publishers
     rclcpp:Publisher<nav_msgs::msg::OcuupancyGrid>::SharedPtr map_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
-
 
     //Global map and position
     nav_msgs::msg::OccupancyGrid global_map_;
@@ -36,7 +36,8 @@ class MappingNode : public rclcpp::Node
     const double distance_threshold = 5.0;
     const int resolution = 10;
     bool costmap_updated_ = false;
-    global_map_.data=;
+    global_map_.data=array<int,30*resolution*30*resolution>;
+    global_map.data.fill(0);
 
     //Costmap callback
     void costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
@@ -140,7 +141,7 @@ class MappingNode : public rclcpp::Node
 
 MapMemoryNode::MapMemoryNode() : Node("map_memory"), map_memory_(robot::MapMemoryCore(this->get_logger()))
 {
- 
+  
 }
 
 
