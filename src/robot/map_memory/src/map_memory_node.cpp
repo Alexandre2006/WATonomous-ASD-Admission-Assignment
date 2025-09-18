@@ -8,12 +8,12 @@ class MappingNode : public rclcpp::Node
     {
       //Subscribers
       costmap_sub_ = this -> create_subscription<nav_msgs::msg::OccupancyGrid>("/costmap", 10, std::bind(&MappingNode::costmapCallback, this, std::placeholders::_1));
-      odom_sub_ = this -> create_subscription<nav_msgs::msg:Odometry>("/odom/filtered", 10, std::bind(&MappingNode::odomCallback, this, std::placeholders::_1));
+      odom_sub_ = this -> create_subscription<nav_msgs::msg::Odometry>("/odom/filtered", 10, std::bind(&MappingNode::odomCallback, this, std::placeholders::_1));
       
 
       //Publishers
       map_pub_ = this -> create_publisher<nav_msgs::msg::OccupancyGrid>("/map", 10);
-      error_pub = this -> create_publisher<std_msgs::msg::String>("/error_topic",10);
+      error_pub_ = this -> create_publisher<std_msgs::msg::String>("/error_topic",10);
 
       //Timer
       timer_ = this -> create_wall_timer(std::chrono::seconds(1), std::bind(&MappingNode::updateMap, this));

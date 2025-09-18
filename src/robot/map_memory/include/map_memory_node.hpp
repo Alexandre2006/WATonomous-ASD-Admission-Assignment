@@ -11,6 +11,16 @@ class MapMemoryNode : public rclcpp::Node {
 
   private:
     robot::MapMemoryCore map_memory_;
+    //subscribers
+    rclcpp::Subscribers<nav_msgs::msgs::OccupancyGrid>::SharedPtr costmap_sub_;
+    rclcpp::Subscribers<nav_msgs::msgs::Odometry>::SharedPtr costmap_sub_;
+
+    //publishers
+    rclcpp::Publisher<nav_msgs::msgs::OccupancyGrid>::SharedPtr map_pub_;
+    rclcpp::Publisher<std_msgs::msgs::String>::SharedPtr error_pub_;
+    
+    //timer
+    rclcpp::TimerBase::SharedPtr::timer_;
 };
 
 #endif 
