@@ -5,5 +5,4 @@ namespace robot
 
 MapMemoryCore::MapMemoryCore(const rclcpp::Logger& logger) 
   : logger_(logger) {}
-
 } 
