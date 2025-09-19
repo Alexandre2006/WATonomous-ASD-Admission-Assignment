@@ -1,26 +1,28 @@
 #ifndef CONTROL_NODE_HPP_
 #define CONTROL_NODE_HPP_
 
-#include <memory>
-#include <optional>
-#include <cmath>
-
-#include "rclcpp/rclcpp.hpp"
-
-#include "control_core.hpp"
-
+// Required includes you wanted
+#include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <cmath>
+#include <optional>
+
+// Extras needed for declarations
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <memory>
+
+// If you have ControlCore, include it here
+// #include "control_core.hpp"
 
 class ControlNode : public rclcpp::Node {
 public:
     ControlNode();
 
 private:
-    // Core control object
-    robot::ControlCore control_;
+    // If you have ControlCore, uncomment this
+    // robot::ControlCore control_;
 
     // ROS interfaces
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub_;
@@ -37,7 +39,7 @@ private:
     double goal_tolerance_;
     double linear_speed_;
 
-    // Internal methods
+    // Internal methods — match exactly with .cpp
     void controlLoop();
     std::optional<geometry_msgs::msg::PoseStamped> findLookaheadPoint();
     geometry_msgs::msg::Twist computeVelocity(const geometry_msgs::msg::PoseStamped &target);
