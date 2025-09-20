@@ -81,6 +81,13 @@ void MapMemoryNode::updateMap()
   }
 }
 
+vector<vector<int>>rotateBySampling(vector<vector<int>>costmap,angle,width,height)
+{
+  double sina = sin(angle);
+  double cosa = cos(angle);
+
+}
+
 //Integrate costmap into global map
 void MapMemoryNode::integrateCostmap()
 {
@@ -98,7 +105,7 @@ void MapMemoryNode::integrateCostmap()
       costmap_index++;
     }
   }
-//convert costmap points into global map points      
+//rotate costmap and put points onto the global map;    
   for(int i = 0;i < (int)map_height;i++)
   {
     for(int j = 0;j < (int)map_width;i++)
@@ -108,8 +115,8 @@ void MapMemoryNode::integrateCostmap()
       else
       {
         //get global map pos
-        double relative_y = map_height/2 - i;
-        double relative_x = j - map_width/2;
+        double relative_y = map_height/2+1 - i;
+        double relative_x = map_width/2+1 - j;
         double point_distance = std::sqrt(std::pow(relative_x, 2) + std::pow(relative_y, 2)); //get distance from robot
         double point_angle = atan(relative_y / relative_x);
         
