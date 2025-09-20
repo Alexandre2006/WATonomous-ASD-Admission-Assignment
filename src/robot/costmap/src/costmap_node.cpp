@@ -4,10 +4,6 @@
 
 #include "costmap_node.hpp"
 
-const float resolution = 0.1;       // Resolution in (m)
-const float inflation_radius = 1.0; // Radius in (m)
-const int occupied = 100;
-
 CostmapNode::CostmapNode()
     : Node("costmap"),
       costmap_core_(robot::CostmapCore(this->get_logger()))
