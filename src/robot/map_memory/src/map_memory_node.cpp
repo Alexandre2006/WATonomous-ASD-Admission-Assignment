@@ -81,19 +81,14 @@ void MapMemoryNode::updateMap()
   }
 }
 
-vector<vector<int>>rotateBySampling(vector<vector<int>>costmap,angle,width,height)
-{
-  double sina = sin(angle);
-  double cosa = cos(angle);
-
-}
-
 //Integrate costmap into global map
 void MapMemoryNode::integrateCostmap()
 {
   
   const uint map_width = latest_costmap_.info.width;
   const uint map_height = latest_costmap_.info.height;
+  const uint center_x = map_width/2+1;
+  const uint center_y = map_height/2+1;
   //convert 1D array into 2D map
   int costmap_index = 0;
   vector<vector<int>>cost_map_2D(map_height,vector<int>(map_width,0));
@@ -105,32 +100,28 @@ void MapMemoryNode::integrateCostmap()
       costmap_index++;
     }
   }
-//rotate costmap and put points onto the global map;    
+//rotate costmap and put points onto the global map;   
+  double sina = sin(orientation);
+  double cosa = cos(orientation); 
   for(int i = 0;i < (int)map_height;i++)
   {
+    double relative_y = center_y - i;
     for(int j = 0;j < (int)map_width;i++)
     {
       if(cost_map_2D[i][j] == 0) //nothing was recorded to be in that spot, so we dont try to replace any value
         continue;
       else
       {
-        //get global map pos
-        double relative_y = map_height/2+1 - i;
-        double relative_x = map_width/2+1 - j;
-        double point_distance = std::sqrt(std::pow(relative_x, 2) + std::pow(relative_y, 2)); //get distance from robot
-        double point_angle = atan(relative_y / relative_x);
+        double relative_x = center_x - j;
+        //get map pos
+        int map_x = center_x + (int)(-relative_x * cosa - relative_y * sina);//get x index on the map
+        int map_y = center_y + (int)(relative_y * cosa + relative_x * sina);//get y index on on the map
         
-        int map_x = (int)(point_distance * cos(orientation + point_angle) + x_pos);//get x index on the map
-        int map_y = (int)(point_distance * sin(orientation + point_angle) + y_pos);//get y index on on the map
         //check bounds
         if(map_x >= 0 && map_x < map_size*resolution && map_y >= 0 && map_y < map_size*resolution)
-        {
           global_map[map_y][map_x] = cost_map_2D[i][j];
-        }
         else
-        {
           cout << "the point was out of bounds!";
-        }
       }
     }
   } 
