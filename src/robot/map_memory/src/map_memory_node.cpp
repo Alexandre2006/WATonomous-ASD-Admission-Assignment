@@ -1,6 +1,164 @@
 #include "map_memory_node.hpp"
+#include <iostream>
+#include <cmath>
+#include <chrono>
+#include <memory>
+#include <vector>
+using namespace std;
 
-MapMemoryNode::MapMemoryNode() : Node("map_memory"), map_memory_(robot::MapMemoryCore(this->get_logger())) {}
+nav_msgs::msg::OccupancyGrid latest_costmap_;
+const int resolution = 10;
+const int map_size = 30;
+bool costmap_updated_ = false;
+bool should_update_map_ = false;
+double last_x = 0.0;
+double last_y = 0.0;
+double x_pos = 0.0;
+double y_pos = 0.0;
+double orientation = 0.0;
+vector<vector<int>>global_map(map_size*resolution+1,vector<int>(map_size*resolution+1)); 
+
+MapMemoryNode::MapMemoryNode() : Node("map_memory"), map_memory_(robot::MapMemoryCore(this->get_logger()))
+{
+  //Subscribers
+      costmap_sub_ = this -> create_subscription<nav_msgs::msg::OccupancyGrid>("/costmap", 10, std::bind(&MapMemoryNode::costmapCallback, this, std::placeholders::_1));
+      odom_sub_ = this -> create_subscription<nav_msgs::msg::Odometry>("/odom/filtered", 10, std::bind(&MapMemoryNode::odomCallback, this, std::placeholders::_1));
+      
+
+      //Publishers
+      map_pub_ = this -> create_publisher<nav_msgs::msg::OccupancyGrid>("/map", 10);
+      error_pub_ = this -> create_publisher<std_msgs::msg::String>("/error_topic",10);
+
+      //Timer
+      timer_ = this -> create_wall_timer(std::chrono::seconds(1), std::bind(&MapMemoryNode::updateMap, this));
+}
+
+//Costmap callback
+void MapMemoryNode::costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr costmap)
+{
+  //Store latest costmap
+  latest_costmap_ = *costmap;
+  costmap_updated_ = true;
+}
+
+int quatToYaw(geometry_msgs::msg::Quaternion quat)  //got this from wikipedia lol https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Source_code_2
+{
+
+    // yaw (z-axis rotation)
+    double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+    double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+    int angle = std::atan2(siny_cosp, cosy_cosp);
+    return angle;
+}
+
+//Odometry callback
+void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_msgs)
+{
+  x_pos = odom_msgs -> pose.pose.position.x;
+  y_pos = odom_msgs -> pose.pose.position.y;
+  orientation = quatToYaw(odom_msgs -> pose.pose.orientation);
+  const double distance_threshold = 5.0;
+
+  //Compute distance traveled
+  double distance = std::sqrt(std::pow(x_pos - last_x, 2) + std::pow(y_pos - last_y, 2));
+  if (distance >= distance_threshold) //the robot has traveled further than the threshold so we update the map
+  {
+    last_x = x_pos;
+    last_y = y_pos;
+    should_update_map_ = true;
+  }
+}
+
+//Map updater; Checks whether or not the update the global map based on the timer
+void MapMemoryNode::updateMap()
+{
+  if(should_update_map_ && costmap_updated_)
+  {
+    integrateCostmap(); //update global map
+
+    publishMap();
+    should_update_map_ = false;
+  }
+}
+
+vector<vector<int>>rotateBySampling(vector<vector<int>>costmap,angle,width,height)
+{
+  double sina = sin(angle);
+  double cosa = cos(angle);
+
+}
+
+//Integrate costmap into global map
+void MapMemoryNode::integrateCostmap()
+{
+  
+  const uint map_width = latest_costmap_.info.width;
+  const uint map_height = latest_costmap_.info.height;
+  //convert 1D array into 2D map
+  int costmap_index = 0;
+  vector<vector<int>>cost_map_2D(map_height,vector<int>(map_width,0));
+  for(int i = 0;i < (int)map_height;i++)
+  {
+    for(int j = 0;j < (int)map_width;j++)
+    {
+      cost_map_2D[i][j] = (int)latest_costmap_.data[costmap_index];
+      costmap_index++;
+    }
+  }
+//rotate costmap and put points onto the global map;    
+  for(int i = 0;i < (int)map_height;i++)
+  {
+    for(int j = 0;j < (int)map_width;i++)
+    {
+      if(cost_map_2D[i][j] == 0) //nothing was recorded to be in that spot, so we dont try to replace any value
+        continue;
+      else
+      {
+        //get global map pos
+        double relative_y = map_height/2+1 - i;
+        double relative_x = map_width/2+1 - j;
+        double point_distance = std::sqrt(std::pow(relative_x, 2) + std::pow(relative_y, 2)); //get distance from robot
+        double point_angle = atan(relative_y / relative_x);
+        
+        int map_x = (int)(point_distance * cos(orientation + point_angle) + x_pos);//get x index on the map
+        int map_y = (int)(point_distance * sin(orientation + point_angle) + y_pos);//get y index on on the map
+        //check bounds
+        if(map_x >= 0 && map_x < map_size*resolution && map_y >= 0 && map_y < map_size*resolution)
+        {
+          global_map[map_y][map_x] = cost_map_2D[i][j];
+        }
+        else
+        {
+          cout << "the point was out of bounds!";
+        }
+      }
+    }
+  } 
+}
+
+void MapMemoryNode::publishMap()
+{
+  nav_msgs::msg::OccupancyGrid map;
+  //header
+  map.header.stamp = this -> now();
+  map.header.frame_id = "global_map";
+  //info
+  map.info.resolution = 1.0/(double)resolution;
+  map.info.width = global_map.size();
+  map.info.height = global_map.size();
+
+  //flatten global map
+  map.data.resize(global_map.size()*global_map.size(),0);
+  for(int i = 0;i < (int)global_map.size();i++)
+  {
+    for(int j = 0;j < (int)global_map.size();j++)
+    {
+      map.data[i*global_map.size()+j] = (int8_t)global_map[i][j];
+    }
+  }
+
+  map_pub_ -> publish(map); //publish map (yay!)
+}
 
 int main(int argc, char ** argv)
 {
