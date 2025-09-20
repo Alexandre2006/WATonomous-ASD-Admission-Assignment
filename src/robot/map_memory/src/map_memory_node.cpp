@@ -10,7 +10,7 @@ nav_msgs::msg::OccupancyGrid latest_costmap_;
 const int resolution = 10;
 const int map_size = 30;
 bool costmap_updated_ = false;
-bool should_update_map_ = false;
+bool should_update_map_ = true;
 double last_x = 0.0;
 double last_y = 0.0;
 double x_pos = 0.0;
@@ -72,11 +72,25 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 //Map updater; Checks whether or not the update the global map based on the timer
 void MapMemoryNode::updateMap()
 {
+
+  if (!should_update_map_) {
+        RCLCPP_WARN(this->get_logger(), "Did not update path: didn't think we needed to");
+        return;
+  }
+
+  if (!costmap_updated_) {
+        RCLCPP_WARN(this->get_logger(), "Did not update path: no new costmap");
+        return;
+  }
+
   if(should_update_map_ && costmap_updated_)
   {
+    RCLCPP_WARN(this->get_logger(), "Planning to update!");
     integrateCostmap(); //update global map
+    RCLCPP_WARN(this->get_logger(), "Integrated Costmap!");
 
     publishMap();
+    RCLCPP_WARN(this->get_logger(), "Published!");
     should_update_map_ = false;
   }
 }
@@ -106,25 +120,22 @@ void MapMemoryNode::integrateCostmap()
   for(int i = 0;i < (int)map_height;i++)
   {
     double relative_y = center_y - i;
-    for(int j = 0;j < (int)map_width;i++)
+    for(int j = 0;j < (int)map_width;j++)
     {
-      if(cost_map_2D[i][j] == 0) //nothing was recorded to be in that spot, so we dont try to replace any value
+      if(cost_map_2D[i][j] == 0)
         continue;
       else
       {
         double relative_x = center_x - j;
-        //get map pos
-        int map_x = center_x + (int)(-relative_x * cosa - relative_y * sina);//get x index on the map
-        int map_y = center_y + (int)(relative_y * cosa + relative_x * sina);//get y index on on the map
-        
-        //check bounds
+        int map_x = center_x + (int)(-relative_x * cosa - relative_y * sina);
+        int map_y = center_y + (int)(relative_y * cosa + relative_x * sina);
         if(map_x >= 0 && map_x < map_size*resolution && map_y >= 0 && map_y < map_size*resolution)
           global_map[map_y][map_x] = cost_map_2D[i][j];
         else
           cout << "the point was out of bounds!";
       }
     }
-  } 
+  }
 }
 
 void MapMemoryNode::publishMap()
