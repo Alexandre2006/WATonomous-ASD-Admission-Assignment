@@ -63,9 +63,15 @@ bool PlannerNode::goalReached()
 
 void PlannerNode::planPath()
 {
-  if (!goal_received_ || current_map_.data.empty())
+  if (!goal_received_)
   {
-    RCLCPP_WARN(this->get_logger(), "Cannot plan path: Missing map or goal!");
+    RCLCPP_WARN(this->get_logger(), "Cannot plan path: Missing goal!");
+    return;
+  }
+
+  if (current_map_.data.empty())
+  {
+    RCLCPP_WARN(this->get_logger(), "Cannot plan path: Missing map!");
     return;
   }
 
