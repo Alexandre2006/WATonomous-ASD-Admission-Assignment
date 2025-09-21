@@ -5,12 +5,13 @@
 #include <chrono>
 #include <memory>
 #include <vector>
+#include<string>
 using namespace std;
 
 nav_msgs::msg::OccupancyGrid latest_costmap_;
 
 bool costmap_updated_ = false;
-bool should_update_map_ = true;
+bool should_update_map_ = false;
 double last_x = 0.0;
 double last_y = 0.0;
 double x_pos = 0.0;
@@ -47,9 +48,9 @@ void MapMemoryNode::costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPt
 double quatToYaw(geometry_msgs::msg::Quaternion quat)  //got this from wikipedia lol https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Source_code_2
 {
     // yaw (z-axis rotation)
-    //double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
-    //double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
-    double angle = std::atan2(quat.y, quat.w)*2;
+    double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+    double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+    double angle = atan2(siny_cosp, cosy_cosp);
     return angle;
 }
 
@@ -59,6 +60,7 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
   x_pos = odom_msgs -> pose.pose.position.x;
   y_pos = odom_msgs -> pose.pose.position.y;
   orientation =  quatToYaw(odom_msgs -> pose.pose.orientation);
+
   const double distance_threshold = 5.0;
 
   //Compute distance traveled
@@ -74,7 +76,7 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 //Map updater; Checks whether or not the update the global map based on the timer
 void MapMemoryNode::updateMap()
 {
-
+  /*
   if (!should_update_map_) {
         RCLCPP_WARN(this->get_logger(), "Did not update path: didn't think we needed to");
         return;
@@ -84,7 +86,7 @@ void MapMemoryNode::updateMap()
         RCLCPP_WARN(this->get_logger(), "Did not update path: no new costmap");
         return;
   }
-
+  */
   if(should_update_map_ && costmap_updated_)
   {
     integrateCostmap(); //update global map
@@ -97,18 +99,14 @@ void MapMemoryNode::updateMap()
 //Integrate costmap into global map
 void MapMemoryNode::integrateCostmap()
 {
-
-  // Clear the global map before integrating the new costmap
-  for (auto& row : global_map) {
-    std::fill(row.begin(), row.end(), 0);
-  }
   
   const uint map_width = latest_costmap_.info.width;
   const uint map_height = latest_costmap_.info.height;
-  int local_center_x = map_width / 2;
-  int local_center_y = map_height / 2;
-  int global_center_x = global_map.size() / 2;
-  int global_center_y = global_map.size() / 2;
+  const uint cost_center_x = latest_costmap_.info.origin.position.x;
+  const uint cost_center_y = latest_costmap_.info.origin.position.y;
+
+  const int global_center_x = global_map.size()/2+1;
+  const int global_center_y = global_map.size()/2+1;
   //convert 1D array into 2D map
   int costmap_index = 0;
   vector<vector<int>>cost_map_2D(map_height,vector<int>(map_width,0));
@@ -123,28 +121,32 @@ void MapMemoryNode::integrateCostmap()
   //rotate costmap and put points onto the global map;   
   double sina = sin(orientation);
   double cosa = cos(orientation); 
+  int outCount = 0;
   for(int i = 0;i < (int)map_height;i++)
   {
+    double relative_y = i - cost_center_y;
     for(int j = 0;j < (int)map_width;j++)
-    { 
+    {
       if(cost_map_2D[i][j] == 0)
         continue;
       else
       {
-          double relative_y = local_center_y - i;
-        double relative_x = local_center_x - j;
-        //get map pos
-          int map_x = global_center_x + static_cast<int>(relative_x * cosa - relative_y * sina);
-      int map_y = global_center_y + static_cast<int>(relative_x * sina + relative_y * cosa);
-
+        double relative_x = cost_center_x - j;
+        
+        //get map pos using rotate by sampling
+        int map_x = global_center_x+(int)(x_pos/resolution + (relative_x * cosa - relative_y * sina));//get x index on the map
+        int map_y = global_center_y+(int)(y_pos/resolution + (relative_y * cosa + relative_x * sina));//get y index on on the map
         //check bounds
-        if(map_x >= 0 && map_x < (int)(map_size/resolution) && map_y >= 0 && map_y < int(map_size/resolution))
+        if(map_x >= 0 && map_x < (int)(global_map.size()) && map_y >= 0 && map_y < int(global_map.size())
+           && cost_map_2D[i][j] > global_map[map_y][map_x]) //only replaces if the cost is higher
           global_map[map_y][map_x] = cost_map_2D[i][j];
         else
-          cout << "the point was out of bounds!";
+          outCount++; //tracks how many points with values were plotted outside the graph
+
       }
     }
   }
+  RCLCPP_WARN(this -> get_logger(),"# of out of bounds points: %d",outCount);
 }
 
 void MapMemoryNode::publishMap()
@@ -158,8 +160,8 @@ void MapMemoryNode::publishMap()
   map.info.width = global_map.size();
   map.info.height = global_map.size();
   
-  map.info.origin.position.x = (global_map.size()/2+1)*resolution;
-  map.info.origin.position.y = (global_map.size()/2+1)*resolution;
+  map.info.origin.position.x = x_pos;
+  map.info.origin.position.y = y_pos;
   map.info.origin.position.z = 0;
 
   //flatten global map
