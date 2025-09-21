@@ -158,6 +158,7 @@ void MapMemoryNode::publishMap()
   map.info.origin.position.x = (global_map.size()/2+1)*resolution;
   map.info.origin.position.y = (global_map.size()/2+1)*resolution;
   map.info.origin.position.z = 0;
+
   //flatten global map
   map.data.resize(global_map.size()*global_map.size(),0);
   for(int i = 0;i < (int)global_map.size();i++)

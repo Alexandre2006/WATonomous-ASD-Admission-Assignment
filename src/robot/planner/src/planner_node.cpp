@@ -89,6 +89,11 @@ void PlannerNode::planPath()
             my >= 0 && my < (int)current_map_.info.height);
   };
 
+    RCLCPP_INFO(this->get_logger(),
+              "Planning path: Start (world): (%.2f, %.2f), Goal (world): (%.2f, %.2f)",
+              robot_pose_.position.x, robot_pose_.position.y,
+              goal_.point.x, goal_.point.y);
+
   int start_x, start_y, goal_x, goal_y;
   if (!worldToMap(robot_pose_.position.x, robot_pose_.position.y, start_x, start_y) ||
       !worldToMap(goal_.point.x, goal_.point.y, goal_x, goal_y))
