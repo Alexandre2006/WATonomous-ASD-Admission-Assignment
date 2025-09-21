@@ -78,18 +78,21 @@ void PlannerNode::planPath()
   // Convert world coords -> map indices
   auto worldToMap = [&](double wx, double wy, int &mx, int &my) -> bool
   {
-    double origin_x = current_map_.info.origin.position.x;
-    double origin_y = current_map_.info.origin.position.y;
     double res = current_map_.info.resolution;
+    int width = current_map_.info.width;
+    int height = current_map_.info.height;
 
-    mx = static_cast<int>((wx - origin_x) / res);
-    my = static_cast<int>((wy - origin_y) / res);
+    // Center of the map in map indices
+    double center_x = width / 2.0;
+    double center_y = height / 2.0;
 
-    return (mx >= 0 && mx < (int)current_map_.info.width &&
-            my >= 0 && my < (int)current_map_.info.height);
+    mx = static_cast<int>(std::round(center_x + wx / res));
+    my = static_cast<int>(std::round(center_y + wy / res));
+
+    return (mx >= 0 && mx < width && my >= 0 && my < height);
   };
 
-    RCLCPP_INFO(this->get_logger(),
+  RCLCPP_INFO(this->get_logger(),
               "Planning path: Start (world): (%.2f, %.2f), Goal (world): (%.2f, %.2f)",
               robot_pose_.position.x, robot_pose_.position.y,
               goal_.point.x, goal_.point.y);
@@ -97,6 +100,24 @@ void PlannerNode::planPath()
   int start_x, start_y, goal_x, goal_y;
   if (!worldToMap(robot_pose_.position.x, robot_pose_.position.y, start_x, start_y) ||
       !worldToMap(goal_.point.x, goal_.point.y, goal_x, goal_y))
+
+    RCLCPP_INFO(this->get_logger(),
+                "Map origin: (%.2f, %.2f), resolution: %.3f, size: %d x %d",
+                current_map_.info.origin.position.x, current_map_.info.origin.position.y,
+                current_map_.info.resolution,
+                current_map_.info.width, current_map_.info.height);
+
+  bool start_ok = worldToMap(robot_pose_.position.x, robot_pose_.position.y, start_x, start_y);
+  bool goal_ok = worldToMap(goal_.point.x, goal_.point.y, goal_x, goal_y);
+
+  RCLCPP_INFO(this->get_logger(),
+              "Start (world): (%.2f, %.2f) -> (map): (%d, %d) [%s]",
+              robot_pose_.position.x, robot_pose_.position.y, start_x, start_y, start_ok ? "OK" : "OUT");
+  RCLCPP_INFO(this->get_logger(),
+              "Goal  (world): (%.2f, %.2f) -> (map): (%d, %d) [%s]",
+              goal_.point.x, goal_.point.y, goal_x, goal_y, goal_ok ? "OK" : "OUT");
+
+  if (!start_ok || !goal_ok)
   {
     RCLCPP_ERROR(this->get_logger(), "Start or goal out of map bounds!");
     return;
@@ -185,8 +206,16 @@ void PlannerNode::planPath()
     {
       geometry_msgs::msg::PoseStamped pose;
       pose.header = path.header;
-      pose.pose.position.x = cur->x * current_map_.info.resolution + current_map_.info.origin.position.x;
-      pose.pose.position.y = cur->y * current_map_.info.resolution + current_map_.info.origin.position.y;
+
+      // Center-based origin conversion
+      double res = current_map_.info.resolution;
+      int width = current_map_.info.width;
+      int height = current_map_.info.height;
+      double center_x = width / 2.0;
+      double center_y = height / 2.0;
+
+      pose.pose.position.x = (cur->x - center_x) * res;
+      pose.pose.position.y = (cur->y - center_y) * res;
       pose.pose.position.z = 0.0;
       path.poses.push_back(pose);
       cur = cur->parent;

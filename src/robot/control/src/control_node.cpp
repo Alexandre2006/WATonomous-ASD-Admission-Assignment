@@ -37,7 +37,14 @@ ControlNode::ControlNode() : rclcpp::Node("pure_pursuit_controller") {
 }
 
 void ControlNode::controlLoop() {
-    if (!current_path_ || !robot_odom_ || current_path_->poses.empty()) {
+    if (!current_path_ || !robot_odom_) {
+        return;
+    }
+
+    // If path is empty, stop the robot
+    if (current_path_->poses.empty()) {
+        geometry_msgs::msg::Twist stop;
+        cmd_vel_pub_->publish(stop);
         return;
     }
 

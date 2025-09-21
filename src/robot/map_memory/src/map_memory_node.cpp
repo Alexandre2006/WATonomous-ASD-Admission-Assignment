@@ -103,11 +103,18 @@ void MapMemoryNode::updateMap()
 //Integrate costmap into global map
 void MapMemoryNode::integrateCostmap()
 {
+
+  // Clear the global map before integrating the new costmap
+  for (auto& row : global_map) {
+    std::fill(row.begin(), row.end(), 0);
+  }
   
   const uint map_width = latest_costmap_.info.width;
   const uint map_height = latest_costmap_.info.height;
-  const uint center_x = map_width/2+1;
-  const uint center_y = map_height/2+1;
+  int local_center_x = map_width / 2;
+  int local_center_y = map_height / 2;
+  int global_center_x = global_map.size() / 2;
+  int global_center_y = global_map.size() / 2;
   //convert 1D array into 2D map
   int costmap_index = 0;
   vector<vector<int>>cost_map_2D(map_height,vector<int>(map_width,0));
@@ -124,18 +131,18 @@ void MapMemoryNode::integrateCostmap()
   double cosa = cos(orientation); 
   for(int i = 0;i < (int)map_height;i++)
   {
-    double relative_y = center_y - i;
     for(int j = 0;j < (int)map_width;j++)
-    {
+    { 
       if(cost_map_2D[i][j] == 0)
         continue;
       else
       {
-        double relative_x = center_x - j;
+          double relative_y = local_center_y - i;
+        double relative_x = local_center_x - j;
         //get map pos
-        int map_x = center_x + (int)(relative_x * cosa - relative_y * sina);//get x index on the map
-        int map_y = center_y + (int)(relative_y * cosa + relative_x * sina);//get y index on on the map
-        
+          int map_x = global_center_x + static_cast<int>(relative_x * cosa - relative_y * sina);
+      int map_y = global_center_y + static_cast<int>(relative_x * sina + relative_y * cosa);
+
         //check bounds
         if(map_x >= 0 && map_x < (int)(map_size/resolution) && map_y >= 0 && map_y < int(map_size/resolution))
           global_map[map_y][map_x] = cost_map_2D[i][j];
