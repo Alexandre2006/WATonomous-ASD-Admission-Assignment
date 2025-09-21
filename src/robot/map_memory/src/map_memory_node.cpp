@@ -23,12 +23,6 @@ vector<vector<int>>global_map((int)(map_size/resolution)+1,vector<int>((int)(map
 
 MapMemoryNode::MapMemoryNode() : Node("map_memory"), map_memory_(robot::MapMemoryCore(this->get_logger()))
 {
-  /*intialise python interpreter
-  Py_Initialize();
-  PyRun_SimpleString("import sys");
-  PyRun_SimpleString('sys.path.append("map_visualiser.py")');
-  */
-
   //Subscribers
   costmap_sub_ = this -> create_subscription<nav_msgs::msg::OccupancyGrid>("/costmap", 10, std::bind(&MapMemoryNode::costmapCallback, this, std::placeholders::_1));
   odom_sub_ = this -> create_subscription<nav_msgs::msg::Odometry>("/odom/filtered", 10, std::bind(&MapMemoryNode::odomCallback, this, std::placeholders::_1));
@@ -53,9 +47,9 @@ void MapMemoryNode::costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPt
 double quatToYaw(geometry_msgs::msg::Quaternion quat)  //got this from wikipedia lol https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Source_code_2
 {
     // yaw (z-axis rotation)
-    double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
-    double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
-    double angle = std::atan2(siny_cosp, cosy_cosp);
+    //double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+    //double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+    double angle = std::atan2(quat.y, quat.w)*2;
     return angle;
 }
 
@@ -64,7 +58,7 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 {
   x_pos = odom_msgs -> pose.pose.position.x;
   y_pos = odom_msgs -> pose.pose.position.y;
-  orientation =  quatToYaw(odom_msgs -> pose.pose.orientation)*(22.0/7.0/180.0); //convert the angle to radians (letting 22/7 be the approx of pi);
+  orientation =  quatToYaw(odom_msgs -> pose.pose.orientation);
   const double distance_threshold = 5.0;
 
   //Compute distance traveled
