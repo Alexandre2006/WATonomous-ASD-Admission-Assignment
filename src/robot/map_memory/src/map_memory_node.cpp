@@ -1,4 +1,5 @@
 #include "map_memory_node.hpp"
+
 #include <iostream>
 #include <cmath>
 #include <chrono>
@@ -22,17 +23,23 @@ vector<vector<int>>global_map((int)(map_size/resolution)+1,vector<int>((int)(map
 
 MapMemoryNode::MapMemoryNode() : Node("map_memory"), map_memory_(robot::MapMemoryCore(this->get_logger()))
 {
+  /*intialise python interpreter
+  Py_Initialize();
+  PyRun_SimpleString("import sys");
+  PyRun_SimpleString('sys.path.append("map_visualiser.py")');
+  */
+
   //Subscribers
-      costmap_sub_ = this -> create_subscription<nav_msgs::msg::OccupancyGrid>("/costmap", 10, std::bind(&MapMemoryNode::costmapCallback, this, std::placeholders::_1));
-      odom_sub_ = this -> create_subscription<nav_msgs::msg::Odometry>("/odom/filtered", 10, std::bind(&MapMemoryNode::odomCallback, this, std::placeholders::_1));
-      
+  costmap_sub_ = this -> create_subscription<nav_msgs::msg::OccupancyGrid>("/costmap", 10, std::bind(&MapMemoryNode::costmapCallback, this, std::placeholders::_1));
+  odom_sub_ = this -> create_subscription<nav_msgs::msg::Odometry>("/odom/filtered", 10, std::bind(&MapMemoryNode::odomCallback, this, std::placeholders::_1));
+  
 
-      //Publishers
-      map_pub_ = this -> create_publisher<nav_msgs::msg::OccupancyGrid>("/map", 10);
-      error_pub_ = this -> create_publisher<std_msgs::msg::String>("/error_topic",10);
+  //Publishers
+  map_pub_ = this -> create_publisher<nav_msgs::msg::OccupancyGrid>("/map", 10);
+  error_pub_ = this -> create_publisher<std_msgs::msg::String>("/error_topic",10);
 
-      //Timer
-      timer_ = this -> create_wall_timer(std::chrono::seconds(1), std::bind(&MapMemoryNode::updateMap, this));
+  //Timer
+  timer_ = this -> create_wall_timer(std::chrono::seconds(1), std::bind(&MapMemoryNode::updateMap, this));
 }
 
 //Costmap callback
@@ -43,12 +50,12 @@ void MapMemoryNode::costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPt
   costmap_updated_ = true;
 }
 
-int quatToYaw(geometry_msgs::msg::Quaternion quat)  //got this from wikipedia lol https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Source_code_2
+double quatToYaw(geometry_msgs::msg::Quaternion quat)  //got this from wikipedia lol https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Source_code_2
 {
     // yaw (z-axis rotation)
     double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
     double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
-    int angle = std::atan2(siny_cosp, cosy_cosp);
+    double angle = std::atan2(siny_cosp, cosy_cosp);
     return angle;
 }
 
@@ -57,7 +64,7 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 {
   x_pos = odom_msgs -> pose.pose.position.x;
   y_pos = odom_msgs -> pose.pose.position.y;
-  orientation = quatToYaw(odom_msgs -> pose.pose.orientation);
+  orientation =  quatToYaw(odom_msgs -> pose.pose.orientation)*(22.0/7.0/180.0); //convert the angle to radians (letting 22/7 be the approx of pi);
   const double distance_threshold = 5.0;
 
   //Compute distance traveled
@@ -86,12 +93,8 @@ void MapMemoryNode::updateMap()
 
   if(should_update_map_ && costmap_updated_)
   {
-    
     integrateCostmap(); //update global map
-    RCLCPP_WARN(this->get_logger(), "Integrated Costmap!");
-
     publishMap();
-    RCLCPP_WARN(this->get_logger(), "Published!");
     should_update_map_ = false;
     costmap_updated_ = false;
   }
@@ -123,7 +126,6 @@ void MapMemoryNode::integrateCostmap()
   {
     double relative_y = center_y - i;
     for(int j = 0;j < (int)map_width;j++)
-    for(int j = 0;j < (int)map_width;j++)
     {
       if(cost_map_2D[i][j] == 0)
         continue;
@@ -131,7 +133,7 @@ void MapMemoryNode::integrateCostmap()
       {
         double relative_x = center_x - j;
         //get map pos
-        int map_x = center_x + (int)(-relative_x * cosa - relative_y * sina);//get x index on the map
+        int map_x = center_x + (int)(relative_x * cosa - relative_y * sina);//get x index on the map
         int map_y = center_y + (int)(relative_y * cosa + relative_x * sina);//get y index on on the map
         
         //check bounds
