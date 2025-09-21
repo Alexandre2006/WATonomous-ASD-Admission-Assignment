@@ -131,7 +131,7 @@ void MapMemoryNode::integrateCostmap()
         continue;
       else
       {
-        double relative_x = center_x - j;
+        double relative_x = j - center_x;
         //get map pos
         int map_x = center_x + (int)(relative_x * cosa - relative_y * sina);//get x index on the map
         int map_y = center_y + (int)(relative_y * cosa + relative_x * sina);//get y index on on the map
