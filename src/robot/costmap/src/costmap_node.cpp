@@ -41,8 +41,8 @@ void CostmapNode::laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr sca
 
     if (range >= range_min && range <= range_max)
     {
-      int x = static_cast<int>((range * std::cos(angle)) / resolution) + origin;
-      int y = static_cast<int>((range * std::sin(angle)) / resolution) + origin;
+      int x = static_cast<int>((range * std::sin(angle)) / resolution) + origin;
+      int y = static_cast<int>((range * std::cos(angle)) / resolution) + origin;
 
       // Check bounds
       if (x >= 0 && x < range_size && y >= 0 && y < range_size)
