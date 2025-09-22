@@ -76,6 +76,7 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 //Map updater; Checks whether or not the update the global map based on the timer
 void MapMemoryNode::updateMap()
 {
+  //remember to uncomment this later
   /*
   if (!should_update_map_) {
         RCLCPP_WARN(this->get_logger(), "Did not update path: didn't think we needed to");
@@ -102,11 +103,10 @@ void MapMemoryNode::integrateCostmap()
   
   const uint map_width = latest_costmap_.info.width;
   const uint map_height = latest_costmap_.info.height;
-  const uint cost_center_x = latest_costmap_.info.origin.position.x;
-  const uint cost_center_y = latest_costmap_.info.origin.position.y;
-
-  const int global_center_x = global_map.size()/2+1;
-  const int global_center_y = global_map.size()/2+1;
+  const uint local_center_x = map_width / 2;
+  const uint local_center_y = map_height / 2;
+  const int global_center_x = global_map.size()/2;
+  const int global_center_y = global_map.size()/2;
   //convert 1D array into 2D map
   int costmap_index = 0;
   vector<vector<int>>cost_map_2D(map_height,vector<int>(map_width,0));
@@ -124,18 +124,17 @@ void MapMemoryNode::integrateCostmap()
   int outCount = 0;
   for(int i = 0;i < (int)map_height;i++)
   {
-    double relative_y = i - cost_center_y;
     for(int j = 0;j < (int)map_width;j++)
     {
       if(cost_map_2D[i][j] == 0)
         continue;
       else
       {
-        double relative_x = cost_center_x - j;
-        
+        double relative_x = local_center_x - i;
+        double relative_y = local_center_y - i;
         //get map pos using rotate by sampling
-        int map_x = global_center_x+(int)(x_pos/resolution + (relative_x * cosa - relative_y * sina));//get x index on the map
-        int map_y = global_center_y+(int)(y_pos/resolution + (relative_y * cosa + relative_x * sina));//get y index on on the map
+        int map_x = global_center_x + static_cast<int>(relative_x * cosa - relative_y * sina);
+        int map_y = global_center_y + static_cast<int>(relative_x * sina + relative_y * cosa);
         //check bounds
         if(map_x >= 0 && map_x < (int)(global_map.size()) && map_y >= 0 && map_y < int(global_map.size())
            && cost_map_2D[i][j] > global_map[map_y][map_x]) //only replaces if the cost is higher
