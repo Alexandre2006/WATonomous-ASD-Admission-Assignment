@@ -13,6 +13,7 @@ geometry_msgs::msg::Quaternion orientation;
 
 bool costmap_updated_ = false;
 bool should_update_map_ = true;
+bool first_update = true;
 double last_x = 0.0;
 double last_y = 0.0;
 double x_pos = 0.0;
@@ -90,9 +91,14 @@ void MapMemoryNode::updateMap()
   }
   if(should_update_map_ && costmap_updated_)
   {
-    integrateCostmap(); //update global map
-    publishMap();
-    should_update_map_ = false;
+    if(!first_update) //prevents global map from publishing an empty map
+    {
+      integrateCostmap(); //update global map
+      publishMap();
+      should_update_map_ = false;
+      costmap_updated_ = false;
+    }
+    first_update = false;
     costmap_updated_ = false;
   }
 }
@@ -132,8 +138,8 @@ void MapMemoryNode::integrateCostmap()
         double relative_y = local_center_y - i;
         //get map pos using rotate by sampling, then translating the costmap to center the robot.
         //swapped y_pos and x_pos values are to compensate for the fact that the global map is rotated 90 degrees
-        int map_x = (int)local_center_x + (int)(relative_x * cosa - relative_y * sina) - (int)(y_pos/resolution);
-        int map_y = (int)local_center_y + (int)(relative_x * sina + relative_y * cosa) - (int)(x_pos/resolution);
+        int map_x = (int)local_center_x + (int)(-relative_y * cosa - relative_x * sina) + (int)(x_pos/resolution);
+        int map_y = (int)local_center_y + (int)(-relative_y * sina + relative_x * cosa) - (int)(y_pos/resolution);
         //check bounds
         if(map_x >= 0 && map_x < (int)(global_map.size()) && map_y >= 0 && map_y < int(global_map.size())
            && cost_map_2D[i][j] > global_map[map_y][map_x]) //only replaces if the cost is higher
