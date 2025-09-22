@@ -76,7 +76,7 @@ void PlannerNode::planPath()
   }
 
   // Simplified coordinate conversion - both coordinates are relative to map center
-  auto worldToMap = [&](double wx, double wy, int &mx, int &my) -> bool
+    auto worldToMap = [&](double wx, double wy, int &mx, int &my) -> bool
   {
     double res = current_map_.info.resolution;
     int width = current_map_.info.width;
@@ -85,7 +85,7 @@ void PlannerNode::planPath()
     // Convert from center-relative coordinates to map indices
     // Map center is at (width/2, height/2) in grid coordinates
     mx = static_cast<int>(std::floor(wx / res + width / 2.0));
-    my = static_cast<int>(std::floor(wy / res + height / 2.0));
+    my = static_cast<int>(std::floor(-wy / res + height / 2.0)); // Flip Y-axis
 
     return (mx >= 0 && mx < width && my >= 0 && my < height);
   };
@@ -99,7 +99,7 @@ void PlannerNode::planPath()
 
     // Convert from map indices back to center-relative coordinates
     wx = (mx - width / 2.0 + 0.5) * res;  // +0.5 for cell center
-    wy = (my - height / 2.0 + 0.5) * res;
+    wy = -(my - height / 2.0 + 0.5) * res; // Flip Y-axis back
   };
 
   RCLCPP_INFO(this->get_logger(),
@@ -136,10 +136,28 @@ void PlannerNode::planPath()
            y >= 0 && y < (int)current_map_.info.height;
   };
 
-  auto isFree = [&](int x, int y)
+  // Modified cost function instead of binary free/occupied check
+  auto getCost = [&](int x, int y) -> double
   {
     int idx = y * current_map_.info.width + x;
-    return current_map_.data[idx] == 0; // 0 = free, >0 = occupied
+    int8_t cell_value = current_map_.data[idx];
+    
+    if (cell_value == -1) {
+      // Unknown space - treat as moderately costly but passable
+      return 5.0;
+    } else if (cell_value == 0) {
+      // Free space - lowest cost
+      return 1.0;
+    } else if (cell_value < 50) {
+      // Low occupancy (inflation) - higher cost but still passable
+      return 2.0 + (cell_value / 50.0) * 8.0; // Cost ranges from 2-10
+    } else if (cell_value < 90) {
+      // Medium occupancy - very high cost but emergency passable
+      return 10.0 + (cell_value - 50) / 40.0 * 40.0; // Cost ranges from 10-50
+    } else {
+      // High occupancy - extremely high cost, avoid if possible
+      return 100.0; // Very high but not infinite
+    }
   };
 
   auto heuristic = [&](int x, int y)
@@ -189,14 +207,17 @@ void PlannerNode::planPath()
       int nx = current->x + dx;
       int ny = current->y + dy;
 
-      if (!inBounds(nx, ny) || !isFree(nx, ny))
+      if (!inBounds(nx, ny))
         continue;
 
       int neighbor_key = makeKey(nx, ny);
       if (closed_set.count(neighbor_key))
         continue;
 
-      double tentative_g = current->g + std::hypot(dx, dy);
+      // Calculate cost including terrain cost
+      double movement_cost = std::hypot(dx, dy);
+      double terrain_cost = getCost(nx, ny);
+      double tentative_g = current->g + movement_cost * terrain_cost;
 
       if (all_nodes.count(neighbor_key)) {
         if (tentative_g >= all_nodes[neighbor_key]->g)

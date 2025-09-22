@@ -14,7 +14,7 @@ public:
 
 private:
   const float resolution = 0.1;       // Resolution in (m)
-  const float inflation_radius = 1.0; // Radius in (m)
+  const float inflation_radius = 2.0; // Radius in (m)
   const int occupied = 100;
 
   std::vector<std::vector<int>> costmap_;

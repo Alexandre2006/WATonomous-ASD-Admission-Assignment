@@ -64,7 +64,7 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
   
   angle =  quatToYaw(orientation);
 
-  const double distance_threshold = 5.0;
+  const double distance_threshold = 1.0;
 
   //Compute distance traveled
   double distance = std::sqrt(std::pow(x_pos - last_x, 2) + std::pow(y_pos - last_y, 2));
