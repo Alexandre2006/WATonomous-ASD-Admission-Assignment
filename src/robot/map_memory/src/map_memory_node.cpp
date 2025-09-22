@@ -9,6 +9,7 @@
 using namespace std;
 
 nav_msgs::msg::OccupancyGrid latest_costmap_;
+geometry_msgs::msg::Quaternion orientation;
 
 bool costmap_updated_ = false;
 bool should_update_map_ = false;
@@ -16,8 +17,7 @@ double last_x = 0.0;
 double last_y = 0.0;
 double x_pos = 0.0;
 double y_pos = 0.0;
-double orientation = 0.0;
-
+double angle = 0.0;
 const double resolution = 0.1;
 const float map_size = 40.0;
 vector<vector<int>>global_map((int)(map_size/resolution)+1,vector<int>((int)(map_size/resolution)+1)); 
@@ -59,12 +59,15 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 {
   x_pos = odom_msgs -> pose.pose.position.x;
   y_pos = odom_msgs -> pose.pose.position.y;
-  orientation =  quatToYaw(odom_msgs -> pose.pose.orientation);
+  orientation = odom_msgs -> pose.pose.orientation;
+  
+  angle =  quatToYaw(orientation);
 
   const double distance_threshold = 5.0;
 
   //Compute distance traveled
   double distance = std::sqrt(std::pow(x_pos - last_x, 2) + std::pow(y_pos - last_y, 2));
+
   if (distance >= distance_threshold) //the robot has traveled further than the threshold so we update the map
   {
     last_x = x_pos;
@@ -76,18 +79,15 @@ void MapMemoryNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr odom_m
 //Map updater; Checks whether or not the update the global map based on the timer
 void MapMemoryNode::updateMap()
 {
-  //remember to uncomment this later
-  /*
   if (!should_update_map_) {
-        RCLCPP_WARN(this->get_logger(), "Did not update path: didn't think we needed to");
-        return;
+    RCLCPP_WARN(this->get_logger(), "Did not update path: didn't think we needed to");
+    return;
   }
 
   if (!costmap_updated_) {
-        RCLCPP_WARN(this->get_logger(), "Did not update path: no new costmap");
-        return;
+    RCLCPP_WARN(this->get_logger(), "Did not update path: no new costmap");
+    return;
   }
-  */
   if(should_update_map_ && costmap_updated_)
   {
     integrateCostmap(); //update global map
@@ -100,11 +100,10 @@ void MapMemoryNode::updateMap()
 //Integrate costmap into global map
 void MapMemoryNode::integrateCostmap()
 {
-  
-  const uint map_width = latest_costmap_.info.width;
-  const uint map_height = latest_costmap_.info.height;
-  const uint local_center_x = map_width / 2;
-  const uint local_center_y = map_height / 2;
+  const int map_width = latest_costmap_.info.width;
+  const int map_height = latest_costmap_.info.height;
+  const int local_center_x = map_width / 2;
+  const int local_center_y = map_height / 2;
   const int global_center_x = global_map.size()/2;
   const int global_center_y = global_map.size()/2;
   //convert 1D array into 2D map
@@ -119,33 +118,31 @@ void MapMemoryNode::integrateCostmap()
     }
   }
   //rotate costmap and put points onto the global map;   
-  double sina = sin(orientation);
-  double cosa = cos(orientation); 
-  int outCount = 0;
+  double sina = sin(-angle);
+  double cosa = cos(-angle); 
   for(int i = 0;i < (int)map_height;i++)
   {
     for(int j = 0;j < (int)map_width;j++)
     {
-      if(cost_map_2D[i][j] == 0)
+      if(cost_map_2D[i][j] <= 0)//costmap has no value
         continue;
       else
       {
-        double relative_x = local_center_x - i;
+        double relative_x = local_center_x - j;
         double relative_y = local_center_y - i;
-        //get map pos using rotate by sampling
-        int map_x = global_center_x + static_cast<int>(relative_x * cosa - relative_y * sina);
-        int map_y = global_center_y + static_cast<int>(relative_x * sina + relative_y * cosa);
+        //get map pos using rotate by sampling, then translating the costmap to center the robot.
+        //y_pos and x_pos are swapped because we prefered the map to be from the perspective of the robot when it was initialised (pointing towards positive x)
+        int map_x = (int)local_center_x + (int)(relative_x * cosa - relative_y * sina) - (int)(y_pos/resolution);
+        int map_y = (int)local_center_y + (int)(relative_x * sina + relative_y * cosa) - (int)(x_pos/resolution);
         //check bounds
         if(map_x >= 0 && map_x < (int)(global_map.size()) && map_y >= 0 && map_y < int(global_map.size())
            && cost_map_2D[i][j] > global_map[map_y][map_x]) //only replaces if the cost is higher
+        {
           global_map[map_y][map_x] = cost_map_2D[i][j];
-        else
-          outCount++; //tracks how many points with values were plotted outside the graph
-
+        }
       }
     }
   }
-  RCLCPP_WARN(this -> get_logger(),"# of out of bounds points: %d",outCount);
 }
 
 void MapMemoryNode::publishMap()
@@ -158,10 +155,12 @@ void MapMemoryNode::publishMap()
   map.info.resolution = resolution;
   map.info.width = global_map.size();
   map.info.height = global_map.size();
-  
+
+  //robot position
   map.info.origin.position.x = x_pos;
   map.info.origin.position.y = y_pos;
   map.info.origin.position.z = 0;
+  map.info.origin.orientation = orientation;
 
   //flatten global map
   map.data.resize(global_map.size()*global_map.size(),0);
