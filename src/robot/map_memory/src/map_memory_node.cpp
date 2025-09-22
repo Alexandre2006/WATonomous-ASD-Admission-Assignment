@@ -131,7 +131,7 @@ void MapMemoryNode::integrateCostmap()
         double relative_x = local_center_x - j;
         double relative_y = local_center_y - i;
         //get map pos using rotate by sampling, then translating the costmap to center the robot.
-        //y_pos and x_pos are swapped because we prefered the map to be from the perspective of the robot when it was initialised (pointing towards positive x)
+        //swapped y_pos and x_pos values are to compensate for the fact that the global map is rotated 90 degrees
         int map_x = (int)local_center_x + (int)(relative_x * cosa - relative_y * sina) - (int)(y_pos/resolution);
         int map_y = (int)local_center_y + (int)(relative_x * sina + relative_y * cosa) - (int)(x_pos/resolution);
         //check bounds
@@ -171,7 +171,7 @@ void MapMemoryNode::publishMap()
       map.data[i*global_map.size()+j] = (int8_t)global_map[i][j];
     }
   }
-  RCLCPP_WARN(this->get_logger(), "Publihsing!");
+  RCLCPP_WARN(this->get_logger(), "Publishing!");
 
   map_pub_ -> publish(map); //publish map (yay!)
 }
