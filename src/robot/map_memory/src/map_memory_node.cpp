@@ -12,7 +12,7 @@ nav_msgs::msg::OccupancyGrid latest_costmap_;
 geometry_msgs::msg::Quaternion orientation;
 
 bool costmap_updated_ = false;
-bool should_update_map_ = false;
+bool should_update_map_ = true;
 double last_x = 0.0;
 double last_y = 0.0;
 double x_pos = 0.0;
@@ -171,6 +171,7 @@ void MapMemoryNode::publishMap()
       map.data[i*global_map.size()+j] = (int8_t)global_map[i][j];
     }
   }
+  RCLCPP_WARN(this->get_logger(), "Publihsing!");
 
   map_pub_ -> publish(map); //publish map (yay!)
 }
