@@ -75,21 +75,31 @@ void PlannerNode::planPath()
     return;
   }
 
-  // Convert world coords -> map indices
+  // Simplified coordinate conversion - both coordinates are relative to map center
   auto worldToMap = [&](double wx, double wy, int &mx, int &my) -> bool
   {
     double res = current_map_.info.resolution;
     int width = current_map_.info.width;
     int height = current_map_.info.height;
 
-    // Center of the map in map indices
-    double center_x = width / 2.0;
-    double center_y = height / 2.0;
-
-    mx = static_cast<int>(std::round(center_x + wx / res));
-    my = static_cast<int>(std::round(center_y + wy / res));
+    // Convert from center-relative coordinates to map indices
+    // Map center is at (width/2, height/2) in grid coordinates
+    mx = static_cast<int>(std::floor(wx / res + width / 2.0));
+    my = static_cast<int>(std::floor(wy / res + height / 2.0));
 
     return (mx >= 0 && mx < width && my >= 0 && my < height);
+  };
+
+  // Helper function to convert map coordinates back to world coordinates
+  auto mapToWorld = [&](int mx, int my, double &wx, double &wy) -> void
+  {
+    double res = current_map_.info.resolution;
+    int width = current_map_.info.width;
+    int height = current_map_.info.height;
+
+    // Convert from map indices back to center-relative coordinates
+    wx = (mx - width / 2.0 + 0.5) * res;  // +0.5 for cell center
+    wy = (my - height / 2.0 + 0.5) * res;
   };
 
   RCLCPP_INFO(this->get_logger(),
@@ -98,14 +108,11 @@ void PlannerNode::planPath()
               goal_.point.x, goal_.point.y);
 
   int start_x, start_y, goal_x, goal_y;
-  if (!worldToMap(robot_pose_.position.x, robot_pose_.position.y, start_x, start_y) ||
-      !worldToMap(goal_.point.x, goal_.point.y, goal_x, goal_y))
 
-    RCLCPP_INFO(this->get_logger(),
-                "Map origin: (%.2f, %.2f), resolution: %.3f, size: %d x %d",
-                current_map_.info.origin.position.x, current_map_.info.origin.position.y,
-                current_map_.info.resolution,
-                current_map_.info.width, current_map_.info.height);
+  RCLCPP_INFO(this->get_logger(),
+              "Map resolution: %.3f, size: %d x %d",
+              current_map_.info.resolution,
+              current_map_.info.width, current_map_.info.height);
 
   bool start_ok = worldToMap(robot_pose_.position.x, robot_pose_.position.y, start_x, start_y);
   bool goal_ok = worldToMap(goal_.point.x, goal_.point.y, goal_x, goal_y);
@@ -146,16 +153,14 @@ void PlannerNode::planPath()
   std::priority_queue<ANode *, std::vector<ANode *>, decltype(cmp)> open_set(cmp);
 
   std::unordered_map<int, ANode *> all_nodes;
+  std::unordered_set<int> closed_set;
 
   auto makeKey = [&](int x, int y)
   { return y * current_map_.info.width + x; };
 
-  ANode *start = new ANode{start_x, start_y, 0.0, heuristic(start_x, start_y), nullptr};
-  open_set.push(start);
-  all_nodes[makeKey(start_x, start_y)] = start;
-
-  std::unordered_map<int, double> g_score;
-  g_score[makeKey(start_x, start_y)] = 0.0;
+  ANode *start_node = new ANode{start_x, start_y, 0.0, heuristic(start_x, start_y), nullptr};
+  open_set.push(start_node);
+  all_nodes[makeKey(start_x, start_y)] = start_node;
 
   ANode *goal_node = nullptr;
 
@@ -166,6 +171,12 @@ void PlannerNode::planPath()
   {
     ANode *current = open_set.top();
     open_set.pop();
+
+    int current_key = makeKey(current->x, current->y);
+    if (closed_set.count(current_key)) {
+      continue;
+    }
+    closed_set.insert(current_key);
 
     if (current->x == goal_x && current->y == goal_y)
     {
@@ -181,16 +192,20 @@ void PlannerNode::planPath()
       if (!inBounds(nx, ny) || !isFree(nx, ny))
         continue;
 
-      double tentative_g = current->g + std::hypot(dx, dy);
-      int key = makeKey(nx, ny);
+      int neighbor_key = makeKey(nx, ny);
+      if (closed_set.count(neighbor_key))
+        continue;
 
-      if (!g_score.count(key) || tentative_g < g_score[key])
-      {
-        ANode *neighbor = new ANode{nx, ny, tentative_g, heuristic(nx, ny), current};
-        open_set.push(neighbor);
-        g_score[key] = tentative_g;
-        all_nodes[key] = neighbor;
+      double tentative_g = current->g + std::hypot(dx, dy);
+
+      if (all_nodes.count(neighbor_key)) {
+        if (tentative_g >= all_nodes[neighbor_key]->g)
+          continue;
       }
+
+      ANode *neighbor = new ANode{nx, ny, tentative_g, heuristic(nx, ny), current};
+      open_set.push(neighbor);
+      all_nodes[neighbor_key] = neighbor;
     }
   }
 
@@ -200,27 +215,24 @@ void PlannerNode::planPath()
 
   if (goal_node)
   {
-    // Reconstruct path
+    // Reconstruct path using the proper coordinate conversion
     ANode *cur = goal_node;
     while (cur)
     {
       geometry_msgs::msg::PoseStamped pose;
       pose.header = path.header;
 
-      // Center-based origin conversion
-      double res = current_map_.info.resolution;
-      int width = current_map_.info.width;
-      int height = current_map_.info.height;
-      double center_x = width / 2.0;
-      double center_y = height / 2.0;
-
-      pose.pose.position.x = (cur->x - center_x) * res;
-      pose.pose.position.y = (cur->y - center_y) * res;
+      // Use the mapToWorld function for proper conversion
+      mapToWorld(cur->x, cur->y, pose.pose.position.x, pose.pose.position.y);
       pose.pose.position.z = 0.0;
+      
+      pose.pose.orientation.w = 1.0;
+      
       path.poses.push_back(pose);
       cur = cur->parent;
     }
     std::reverse(path.poses.begin(), path.poses.end());
+    RCLCPP_INFO(this->get_logger(), "Path found with %zu waypoints", path.poses.size());
   }
   else
   {
